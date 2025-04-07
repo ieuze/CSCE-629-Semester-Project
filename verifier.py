@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import linprog
 import itertools
+import time # Add for timing
 
 def compute_m_height(G, m):
     """
@@ -16,6 +17,9 @@ def compute_m_height(G, m):
     """
     k, n = G.shape
 
+    print(f"  [Verifier] compute_m_height(G.shape=({k},{n}), m={m}) starting...")
+    start_time = time.time()
+
     if not (1 <= m <= n - 1):
          # The theorem statement assumes m <= n-1.
          # The definition of Γ requires |X|=m-1 and X subset of [n]\\{a,b},
@@ -29,6 +33,8 @@ def compute_m_height(G, m):
     psi_set = list(itertools.product([-1, 1], repeat=m))
 
     max_z = 0.0 # Initialize the maximum objective value found so far
+    lp_count = 0
+    first_lp_logged = False
 
     # Iterate through all possible tuples (a, b, X, ψ) in Γ
     all_indices = list(range(n))
@@ -108,6 +114,11 @@ def compute_m_height(G, m):
                     # Bounds for u_i are (-inf, inf)
                     bounds = [(None, None)] * k
 
+                    # <<< ADDED: Log first LP details >>
+                    if not first_lp_logged:
+                        print(f"  [Verifier] Solving first LP with: a={a}, b={b}, X={X_sorted}, s0={psi[0]}")
+                        first_lp_logged = True
+
                     # Solve the LP
                     # Use 'highs' for better performance and reliability
                     result = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
@@ -118,6 +129,7 @@ def compute_m_height(G, m):
                         z_current = -result.fun # Negate because we minimized
                     elif result.status == 3: # Unbounded
                         z_current = np.inf
+                        print(f"  [Verifier] Found UNBOUNDED LP (inf) at LP #{lp_count} with params a={a}, b={b}, X={X}, psi={psi}")
                     elif result.status == 2: # Infeasible
                         z_current = 0.0
                     # Optional: Handle other statuses (e.g., iteration limit, numerical difficulties)
@@ -131,8 +143,14 @@ def compute_m_height(G, m):
 
                     # If we hit infinity, we know the final result is infinity
                     if max_z == np.inf:
-                         return np.inf
+                        end_time_inf = time.time()
+                        print(f"  [Verifier] compute_m_height returning inf after {lp_count} LPs ({end_time_inf - start_time:.2f} sec)")
+                        return np.inf
 
+                    lp_count += 1
+
+    end_time = time.time()
+    print(f"  [Verifier] compute_m_height finished. max_z={max_z:.4f}. Solved {lp_count} LPs ({end_time - start_time:.2f} sec)")
     return max_z
 
 # Example usage:
