@@ -21,11 +21,11 @@ def main():
     parser.add_argument('--element-max', type=int, default=1, help='Maximum value for elements in P matrix. Default: 1')
 
     # Arguments specific to annealing_generator.py or adaptive_annealing.py
-    parser.add_argument('--t-max', type=float, help='Initial annealing temperature.')
+    parser.add_argument('--t-max', type=float, default=100, help='Initial annealing temperature.')
     parser.add_argument('--t-min', type=float, help='Final annealing temperature.')
-    parser.add_argument('--alpha', type=float, help='Cooling rate (multiplier).')
-    parser.add_argument('--iter-per-temp', type=int, help='Iterations per temperature level.')
-    parser.add_argument('--workers', type=int, help='Number of parallel annealing runs.')
+    parser.add_argument('--alpha', type=float, default=0.95, help='Cooling rate (multiplier).')
+    parser.add_argument('--iter-per-temp', type=int, default=50, help='Iterations per temperature level.')
+    parser.add_argument('--workers', type=int, default=24, help='Number of parallel annealing runs.')
     
     # Arguments specific to adaptive model
     parser.add_argument('--strategy', type=str, choices=['heuristic', 'sampled', 'adaptive', 'auto'], 
