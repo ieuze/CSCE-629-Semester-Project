@@ -73,22 +73,32 @@ def main():
             sys.exit(1)
 
     else: # m > 3
-        target_script = 'hybrid_annealing.py'
-        print(f"--- m = {args.m} > 3, calling {target_script} for hybrid annealing ---")
+        target_script = 'annealing_generator.py'
+        print(f"--- m = {args.m} > 3, calling {target_script} for standard annealing with verifier ---")
         base_command.append(target_script)
 
-        # Pass only core arguments relevant to hybrid annealing
+        # Add core arguments
         base_command.extend(['-k', str(args.k)])
         base_command.extend(['-n', str(args.n)])
         base_command.extend(['-m', str(args.m)])
 
-        # Pass element range if provided
+        # Add optional arguments relevant to standard annealing
         if args.element_min is not None:
             base_command.extend(['--element-min', str(args.element_min)])
         if args.element_max is not None:
             base_command.extend(['--element-max', str(args.element_max)])
+        if args.t_max is not None:
+            base_command.extend(['--t-max', str(args.t_max)])
+        if args.t_min is not None:
+            base_command.extend(['--t-min', str(args.t_min)])
+        if args.alpha is not None:
+            base_command.extend(['--alpha', str(args.alpha)])
+        if args.iter_per_temp is not None:
+            base_command.extend(['--iter-per-temp', str(args.iter_per_temp)])
+        if args.workers is not None:
+            base_command.extend(['--workers', str(args.workers)])
 
-        # Add any unknown arguments (allows passing hybrid-specific args like --surrogate-t-max)
+        # Add any unknown arguments
         base_command.extend(unknown_args)
 
     print(f"Executing command: {' '.join(base_command)}")
