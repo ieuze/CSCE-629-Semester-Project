@@ -15,10 +15,10 @@ identity = np.eye(4)
 
 # Combine with the given matrix to form a 4x9 generator matrix
 G = np.hstack((identity, np.array([
-    [-1,  1,  2,  2,  1],
-    [ 1,  2,  2,  1, -1],
-    [ 2,  2,  1, -1,  1],
-    [ 2,  1, -1,  1,  2]
+    [-1, -2, -1, -2,  1],
+    [-1,  1,  0,  2, -1],
+    [-1,  2,  0,  1,  1],
+    [-2, -2, -2,  0, -1]
 ])))
 
 
