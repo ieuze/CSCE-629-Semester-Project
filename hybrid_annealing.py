@@ -38,12 +38,22 @@ def signal_handler(sig, frame):
     user_interrupted = True
 
 def calculate_cost(G, m):
-    """Calculate m-height using either surrogate or original method."""
+    """Calculate m-height using either surrogate or original method.
+       In surrogate mode (phase 1), falls back to original if surrogate is 0 or non-finite.
+    """
     try:
-        if use_original_verifier:
+        if use_original_verifier: # True during phase 2 (exact refinement)
             height = original_compute_m_height(G, m)
-        else:
-            height = surrogate_compute_m_height(G, m)
+        else: # False during phase 1 (surrogate exploration)
+            # Try surrogate first
+            surrogate_height = surrogate_compute_m_height(G, m)
+            # Check if the surrogate result is 0 or non-finite (inf, nan)
+            if surrogate_height == 0 or not np.isfinite(surrogate_height):
+                # Fall back to the original verifier
+                height = original_compute_m_height(G, m)
+            else:
+                # Use the finite, non-zero surrogate result
+                height = surrogate_height
         return height
     except ValueError as e:
         return float('inf')
