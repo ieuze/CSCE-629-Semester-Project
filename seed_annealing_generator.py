@@ -269,7 +269,7 @@ def main():
         description="Optimize the m-height of a systematic generator matrix G=[I|P] using simulated annealing, starting from a seed file containing n, k, m, and the P matrix.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument('--seed-file', type=str, required=True,
+    parser.add_argument('--seed-file', type=str, default="test.txt",
                         help='Path to the text file containing n, k, m on the first line, followed by the initial seed P matrix.')
     parser.add_argument('--element-min', type=int, default=-1,
                         help='Minimum value allowed for elements in the P matrix during search.')
