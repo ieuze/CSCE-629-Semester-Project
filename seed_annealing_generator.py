@@ -286,9 +286,9 @@ def main():
     )
     parser.add_argument('--seed-file', type=str, default="test.txt",
                         help='Path to the text file containing n, k, m on the first line, followed by the initial seed P matrix.')
-    parser.add_argument('--initial-temp', type=float, default=10,
+    parser.add_argument('--initial-temp', type=float, default=100,
                         help='Initial temperature for simulated annealing.')
-    parser.add_argument('--cooling-rate', type=float, default=0.95,
+    parser.add_argument('--cooling-rate', type=float, default=0.9,
                         help='Cooling rate (0 < rate < 1).')
     parser.add_argument('--steps-per-temp', type=int, default=5,
                         help='Number of steps (neighbor evaluations) to perform at each temperature.')
