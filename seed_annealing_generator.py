@@ -174,10 +174,13 @@ def simulated_annealing(initial_P, m, element_min, element_max,
 
     current_P = initial_P.copy()
     current_G = np.hstack((I_k, current_P))
-    current_cost = calculate_cost(current_G, m)
+    current_cost = 114514  # Set to infinite to ignore seed's initial cost
 
     best_P = current_P.copy()
     best_cost = current_cost
+
+    second_best_P = current_P.copy()
+    second_best_cost = current_cost
 
     print(f"Initial seed cost (m={m}): {current_cost if current_cost != float('inf') else 'inf'}")
     if best_cost == float('inf'):
@@ -221,9 +224,16 @@ def simulated_annealing(initial_P, m, element_min, element_max,
                         current_cost = neighbor_cost
                         # Update the global best solution
                         if neighbor_cost < best_cost:
+                            # Update second best to the previous best
+                            second_best_P = best_P.copy()
+                            second_best_cost = best_cost
                             best_cost = neighbor_cost
                             best_P = neighbor_P.copy()
                             progress_bar.set_description(f"Annealing (T={temperature:.2f}, Best={best_cost:.4f})")
+                        elif neighbor_cost < second_best_cost:
+                            # Update second best to the current solution
+                            second_best_P = neighbor_P.copy()
+                            second_best_cost = neighbor_cost
 
                     else:
                         # Accept worse solution with a certain probability
@@ -240,26 +250,31 @@ def simulated_annealing(initial_P, m, element_min, element_max,
 
     except KeyboardInterrupt:
         print("Annealing process interrupted by user.")
+        print("Returning the second best solution found so far.")
+        print(second_best_P)
+        print(f"Best cost found before interruption: {best_cost if best_cost != float('inf') else 'inf'}")
+        return second_best_P, second_best_cost
     finally:
         progress_bar.close()
 
     print("--- Simulated Annealing Finished ---")
     print(f"Best cost found (m={m}): {best_cost if best_cost != float('inf') else 'inf'}")
+    print(f"Second best cost found (m={m}): {second_best_cost if second_best_cost != float('inf') else 'inf'}")
 
-    if best_cost < float('inf'):
-         # Save the best result
+    if second_best_cost < float('inf'):
+         # Save the second best result
         if output_file:
-            save_p_matrix(best_P, output_file)
+            save_p_matrix(second_best_P, output_file)
         else:
-            print("Best P matrix:")
+            print("Second best P matrix:")
             with np.printoptions(precision=3, suppress=True):
-                print(best_P)
+                print(second_best_P)
             print("Corresponding G = [I|P] matrix:")
-            best_G = np.hstack((I_k, best_P))
+            second_best_G = np.hstack((I_k, second_best_P))
             with np.printoptions(precision=3, suppress=True):
-                 print(best_G)
+                 print(second_best_G)
 
-    return best_P, best_cost
+    return second_best_P, second_best_cost
 
 
 # --- Main Execution ---
@@ -271,15 +286,11 @@ def main():
     )
     parser.add_argument('--seed-file', type=str, default="test.txt",
                         help='Path to the text file containing n, k, m on the first line, followed by the initial seed P matrix.')
-    parser.add_argument('--element-min', type=int, default=-1,
-                        help='Minimum value allowed for elements in the P matrix during search.')
-    parser.add_argument('--element-max', type=int, default=1,
-                        help='Maximum value allowed for elements in the P matrix during search.')
-    parser.add_argument('--initial-temp', type=float, default=1.0,
+    parser.add_argument('--initial-temp', type=float, default=10,
                         help='Initial temperature for simulated annealing.')
-    parser.add_argument('--cooling-rate', type=float, default=0.99,
+    parser.add_argument('--cooling-rate', type=float, default=0.95,
                         help='Cooling rate (0 < rate < 1).')
-    parser.add_argument('--steps-per-temp', type=int, default=100,
+    parser.add_argument('--steps-per-temp', type=int, default=5,
                         help='Number of steps (neighbor evaluations) to perform at each temperature.')
     parser.add_argument('--num-workers', type=int, default=None,
                         help='Number of worker processes for parallel neighbor evaluation. Defaults to number of CPU cores.')
@@ -298,9 +309,13 @@ def main():
     n, k, m, initial_P = load_p_matrix(args.seed_file)
     p_cols = n - k # Calculate p_cols from loaded n and k
 
+    # Calculate element_min and element_max based on the seed matrix
+    element_min = int(np.min(initial_P))
+    element_max = int(np.max(initial_P))
+
     # --- Validate Parameters (some validations are now done in load_p_matrix) ---
     # k, n, m validation is implicitly done by load_p_matrix success
-    if args.element_min > args.element_max: parser.error("element-min cannot be greater than element-max")
+    if element_min > element_max: parser.error("element-min cannot be greater than element-max")
     if args.initial_temp <= 0: parser.error("Initial temperature must be positive")
     if not (0 < args.cooling_rate < 1): parser.error("Cooling rate must be between 0 and 1")
     if args.steps_per_temp < 1: parser.error("Steps per temperature must be at least 1")
@@ -309,7 +324,7 @@ def main():
     if num_workers < 1: parser.error("Number of worker processes must be at least 1")
 
      # Specific check for element range and zero columns
-    if args.element_min == 0 and args.element_max == 0 and p_cols > 0:
+    if element_min == 0 and element_max == 0 and p_cols > 0:
          parser.error("Element range is [0, 0] and P matrix exists (n > k). Cannot satisfy no-all-zero column constraint during neighbor search.")
 
     # Check initial P validity loaded from file
@@ -321,7 +336,7 @@ def main():
 
     print(f"--- Starting Simulated Annealing ---")
     print(f"Parameters from file: k={k}, n={n}, m={m}")
-    print(f"Search Element Range: [{args.element_min}, {args.element_max}]")
+    print(f"Search Element Range: [{element_min}, {element_max}]")
     print(f"Annealing Params -> Initial Temp: {args.initial_temp}, Cooling Rate: {args.cooling_rate}, Steps/Temp: {args.steps_per_temp}")
     print(f"Using {num_workers} worker processes")
     if args.seed is not None: print(f"Random Seed: {args.seed}")
@@ -333,8 +348,8 @@ def main():
     best_P, best_cost = simulated_annealing(
         initial_P=initial_P,
         m=m, # Use m from the file
-        element_min=args.element_min,
-        element_max=args.element_max,
+        element_min=element_min,
+        element_max=element_max,
         initial_temp=args.initial_temp,
         cooling_rate=args.cooling_rate,
         steps_per_temp=args.steps_per_temp,
