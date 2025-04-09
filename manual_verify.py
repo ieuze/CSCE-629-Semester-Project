@@ -9,21 +9,21 @@ import numpy as np
 #     [0, 1, 0, -1, 1, 2, 0, 1],
 #     [0, 0, 1, 2, 1, -1, 1, -1]
 # ])
-
 # Create a 4x4 identity matrix
-identity = np.eye(4)
+# Create a 5x5 identity matrix
+identity = np.eye(5)
 
-# Combine with the given matrix to form a 4x9 generator matrix
+# Combine with the given matrix to form a 5x9 generator matrix
 G = np.hstack((identity, np.array([
-    [-1, -2, -1, -2,  1],
-    [-1,  1,  0,  2, -1],
-    [-1,  2,  0,  1,  1],
-    [-2, -2, -2,  0, -1]
+    [1, 1, 1, 1],
+    [1, 1, 1, 0],
+    [1, 1, 0, 1],
+    [1, 1, 0, 0],
+    [1, 0, 1, 0]
 ])))
 
-
-# Set m to 4 (since n - k = 8 - 3 = 5, so m=4 is valid)
-m = 4
+# Set m to 2 (since n - k = 9 - 5 = 4, so m=2 is valid)
+m = 2
 
 # Test the verifier with wider matrix
 try:
