@@ -4,10 +4,10 @@ import json
 import re
 
 # Replace these with your information
-NAME = "YOUR_NAME"
-UIN = "YOUR_UIN"
+NAME = "Yuuzen_Shen"
+UIN = "434000618"
 SESSION = "629-601"  # Change to your session (e.g., "629-601" or "629-700")
-PROJECT = "P3"  # Change to "P1", "P2", or "P3"
+PROJECT = "P1"  # Change to "P1", "P2", or "P3"
 
 def read_matrices_from_file(filename):
     generator_matrices = {}
