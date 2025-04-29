@@ -1,4 +1,4 @@
-= Report, Project 1
+= Report, Project 2
 
 Name: Yuuzen Shen
 UIN: 434000618
@@ -252,3 +252,9 @@ The seed annealing generator refines an existing solution (seed) through simulat
 There were attempts on using a surrogate model to replace the LP solver, but it was mostly bogus and not reliable.
 
 And that's the report for Project 1.
+
+=== Project 2 updates
+
+For project 2, the only change is that we curated a surrogate model written in C++. We added that model code to the latest of code. The logic proceeds the simulated annealing search with the surrogate model, and then verify the final result with the LP solver in python (because the surrogate model has around 10% error, but way faster).
+
+That's the update and thus report for Project 2.
