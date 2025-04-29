@@ -13,25 +13,27 @@ find_package(BLAS   REQUIRED)
 find_package(LAPACK REQUIRED)
 find_package(OpenMP)                         # optional
 
-# -------- 3. 可执行文件 ----------
-add_executable(lp_verifier compute_m_height.cpp)
+# -------- 3. (lp_verifier 目标已被移除) ----------
 
-# 头文件
-target_include_directories(lp_verifier PRIVATE
+# -------- 4. 添加 manual_verify 可执行文件 ----------
+add_executable(manual_verify manual_verify.cpp)
+
+# 头文件 (通常由链接库传递，但显式添加确保安全)
+target_include_directories(manual_verify PRIVATE
     /usr/include/eigen3
     ${HIGHS_INCLUDE_DIRS}
 )
 
-# 库
-target_link_libraries(lp_verifier PRIVATE
+# 库 (与 lp_verifier 相同)
+target_link_libraries(manual_verify PRIVATE
     ${HIGHS_LIBRARIES}
     ${BLAS_LIBRARIES}
     ${LAPACK_LIBRARIES}
 )
 
-# 编译选项
-target_compile_options(lp_verifier PRIVATE -O3 -march=native)
+# 编译选项 (与 lp_verifier 相同)
+target_compile_options(manual_verify PRIVATE -O3 -march=native)
 if(OpenMP_CXX_FOUND)
-  target_link_libraries(lp_verifier PRIVATE OpenMP::OpenMP_CXX)
-  target_compile_options(lp_verifier PRIVATE -fopenmp)
+  target_link_libraries(manual_verify PRIVATE OpenMP::OpenMP_CXX)
+  target_compile_options(manual_verify PRIVATE -fopenmp)
 endif()

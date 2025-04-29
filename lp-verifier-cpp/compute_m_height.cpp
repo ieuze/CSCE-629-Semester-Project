@@ -18,6 +18,7 @@
 #include <numeric>
 #include <mutex>
 #include <iostream>
+#include <algorithm>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -117,6 +118,15 @@ double compute_m_height(const Matrix &G, int m)
 #pragma omp parallel for schedule(dynamic) if (n > 4)
   for (int a = 0; a < n; ++a)
   {
+    // Check if another thread already found infinity
+    {
+        std::lock_guard<std::mutex> l(mtx);
+        if (global_max == inf()) continue; // Skip this 'a' if result is already known to be inf
+    }
+
+    double thread_max = 0.0;
+    bool thread_found_inf = false;
+
     for (int b = 0; b < n; ++b)
     {
       if (a == b)
@@ -141,6 +151,8 @@ double compute_m_height(const Matrix &G, int m)
         for (int idx : others)
           if (std::find(X.begin(), X.end(), idx) == X.end())
             Y.push_back(idx);
+
+        std::sort(X.begin(), X.end());
 
         for (const auto &psi : psi_vec)
         {
@@ -174,26 +186,37 @@ double compute_m_height(const Matrix &G, int m)
           double z = solve_lp(tmpl, c, ineq, ub, eq, rhs);
           if (!std::isfinite(z))
           {
-            global_max = inf();
-            goto next_ab;
+            thread_found_inf = true;
+            thread_max = inf();
+            goto end_loops_for_a; // Break out of psi, X, and b loops for this 'a'
           }
-          if (z > global_max)
+          // No lock here, update thread_max only
+          if (z > thread_max)
           {
-            std::lock_guard<std::mutex> l(mtx);
-            if (z > global_max)
-              global_max = z;
+             thread_max = z;
           }
         }
       } while (std::prev_permutation(mask.begin(), mask.end()));
+    } // end b loop
 
-    next_ab:;
-      if (global_max == inf())
-        continue;
+  end_loops_for_a:; // Target for breaking out if inf is found
+
+    // Safely update global_max after finishing 'a' or finding inf
+    {
+        std::lock_guard<std::mutex> l(mtx);
+        if (thread_found_inf) {
+            global_max = inf();
+        } else if (thread_max > global_max) { // Update only if current thread has a better finite result
+                                          // AND global_max hasn't become inf
+            global_max = thread_max;
+        }
     }
-  }
+
+  } // end parallel a loop
   return global_max;
 }
 
+/* // Comment out the original main function to avoid redefinition
 int main()
 {
   Matrix G(3, 4);
@@ -203,3 +226,4 @@ int main()
   for (int m = 1; m <= 3; ++m)
     std::cout << "h_" << m << "(C) = " << compute_m_height(G, m) << "\n";
 }
+*/
