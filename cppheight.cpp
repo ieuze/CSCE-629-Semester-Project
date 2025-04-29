@@ -282,48 +282,58 @@ double compute_m_height(const Matrix& G, int m) {
     return max_z;
 }
 
-// -------------------- Example Usage --------------------
+// -------------------- Main Function (for subprocess use) --------------------
 int main() {
-    // Define the systematic generator matrix G = [I_4 | P]
-    const int k = 5;
-    const int n = 9;
+    int k, n, m;
+
+    // 1. Read k, n, m from stdin
+    if (!(std::cin >> k >> n >> m)) {
+        std::cerr << "Error: Could not read k, n, m from stdin." << std::endl;
+        return 1;
+    }
+
+    // Basic validation
+    if (k <= 0 || n <= 0 || k > n ) { // m validity checked in compute_m_height
+         std::cerr << "Error: Invalid dimensions k=" << k << ", n=" << n << " read from stdin." << std::endl;
+         return 1;
+    }
+
+    // 2. Read the k x n matrix G from stdin
     Matrix G(k, n);
-    G << 1, 0, 0, 0, 0,  -4,  1, -4,  2,
-         0, 1, 0, 0, 0,  -3,  2, -1, -5,
-         0, 0, 1, 0, 0,  -4,  2, -5, -6,
-         0, 0, 0, 1, 0,   5, -2, -4, -9,
-         0, 0, 0, 0, 1,  -1,  6,  2, -3;
-
-    std::cout << "Using Generator Matrix G (4x9 systematic form):\n" << G << std::endl;
-    std::cout << "n = " << n << ", k = " << k << std::endl;
-
-    // Test only for m = 3
-    int m_test = 4;
-
-    // Check if m is valid before proceeding
-    if (m_test < 1 || m_test >= n) {
-         std::cerr << "Error: m = " << m_test << " is invalid for n = " << n << ". Requires 1 <= m <= n-1." << std::endl;
-         return 1; // Indicate error
-    }
-
-    try {
-        std::cout << "\nComputing m-height for m = " << m_test << "..." << std::endl;
-        double h_m = compute_m_height(G, m_test);
-        std::cout << "  h_" << m_test << "(C) = ";
-        if (std::isfinite(h_m)) {
-            std::cout << h_m << std::endl;
-        } else {
-            std::cout << "inf" << std::endl;
+    for (int i = 0; i < k; ++i) {
+        for (int j = 0; j < n; ++j) {
+            if (!(std::cin >> G(i, j))) {
+                std::cerr << "Error: Could not read matrix element G(" << i << ", " << j << ") from stdin." << std::endl;
+                return 1;
+            }
         }
-    } catch (const std::invalid_argument& e) {
-        std::cerr << "Error computing for m=" << m_test << ": " << e.what() << std::endl;
-        return 1; // Indicate error
-    } catch (const std::exception& e) {
-        std::cerr << "An unexpected error occurred for m=" << m_test << ": " << e.what() << std::endl;
-        return 1; // Indicate error
     }
 
-    return 0;
+    // 3. Compute m-height
+    double h_m = 0.0;
+    try {
+        h_m = compute_m_height(G, m);
+    } catch (const std::invalid_argument& e) {
+        std::cerr << "Error during computation: " << e.what() << std::endl;
+        // Output inf to stdout to signal failure in a way Python might handle
+        std::cout << "inf" << std::endl;
+        return 1; // Indicate specific error if desired, but Python checks stdout
+    } catch (const std::exception& e) {
+        std::cerr << "An unexpected error occurred: " << e.what() << std::endl;
+        std::cout << "inf" << std::endl;
+        return 1;
+    }
+
+    // 4. Print the result ONLY to stdout
+    if (std::isfinite(h_m)) {
+        // Use sufficient precision for output
+        std::cout.precision(std::numeric_limits<double>::max_digits10);
+        std::cout << h_m << std::endl;
+    } else {
+        std::cout << "inf" << std::endl;
+    }
+
+    return 0; // Success
 }
 
 /*

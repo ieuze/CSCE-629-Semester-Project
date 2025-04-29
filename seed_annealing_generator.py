@@ -9,14 +9,41 @@ import multiprocessing
 import math
 import copy
 from tqdm import tqdm
+import subprocess
+import io
+
+# --- 配置 C++ Verifier 路径 ---
+# 您需要将 'path/to/your/cppheight' 替换为实际编译后的 cppheight 可执行文件路径
+# 或者确保它在系统的 PATH 环境变量中。
+CPP_VERIFIER_PATH = "./build/cppheight" # <--- 修改为您的路径
 
 try:
-    # Assuming compute_m_height is in verifier.py at the same level
+    # 尝试找到 C++ Verifier
+    if not os.path.exists(CPP_VERIFIER_PATH) or not os.access(CPP_VERIFIER_PATH, os.X_OK):
+         print(f"Error: C++ verifier executable not found or not executable at '{CPP_VERIFIER_PATH}'")
+         # 尝试在 PATH 中查找
+         from shutil import which
+         if which("cppheight"):
+             print("Found 'cppheight' in PATH, will use that.")
+             CPP_VERIFIER_PATH = "cppheight"
+         else:
+              print("Could not find 'cppheight' in PATH either.")
+              sys.exit(1)
+
+    # --- 重新导入 Python verifier ---
     from verifier import compute_m_height
+    print("Successfully imported Python verifier 'compute_m_height' from 'verifier.py'.")
+
 except ImportError:
     print("Error: Could not import 'compute_m_height' from 'verifier.py'.")
     print("Please ensure 'verifier.py' exists in the same directory or in the Python path.")
+    # 如果找不到 Python verifier，我们应该决定是否继续。
+    # 为了确保最终验证能进行，这里选择退出。
     sys.exit(1)
+except Exception as e:
+     # 处理 C++ Verifier 查找失败等其他错误
+     print(f"Error during setup: {e}")
+     sys.exit(1)
 
 # --- Helper Functions ---
 
@@ -97,12 +124,54 @@ def is_valid_P(P):
     return True
 
 def calculate_cost(G, m):
-    """Calculates the m-height, handling potential errors or infinite results."""
+    """
+    Calculates the m-height by calling the external C++ verifier.
+    Handles potential errors or infinite results.
+    """
+    k, n = G.shape
+
+    # 准备输入给 C++ 程序的字符串
+    # 格式: k n m\n G矩阵 (空格分隔)\n
+    input_str = f"{k} {n} {m}\n"
+    # 使用 StringIO 和 np.savetxt 来格式化矩阵
+    with io.StringIO() as s:
+        # savetxt 默认用空格分隔，fmt='%d' 确保整数输出
+        np.savetxt(s, G, fmt='%d')
+        input_str += s.getvalue()
+
     try:
-        height = compute_m_height(G, m)
-        return height if np.isfinite(height) else float('inf')
+        # 运行 C++ verifier
+        result = subprocess.run(
+            [CPP_VERIFIER_PATH],    # 命令和参数列表
+            input=input_str,        # 将字符串作为 stdin 输入
+            capture_output=True,    # 捕获 stdout 和 stderr
+            text=True,              # 以文本模式处理输入输出
+            check=True,             # 如果 C++ 程序返回非零退出码，则抛出异常
+            timeout=600             # 添加超时（例如 10 分钟）防止卡死
+        )
+
+        # 解析 stdout 输出
+        output_val_str = result.stdout.strip()
+        if output_val_str.lower() == 'inf':
+            return float('inf')
+        else:
+            return float(output_val_str)
+
+    except FileNotFoundError:
+         print(f"Error: Could not find C++ verifier executable at '{CPP_VERIFIER_PATH}'.")
+         return float('inf')
+    except subprocess.CalledProcessError as e:
+        print(f"Error: C++ verifier returned non-zero exit status {e.returncode}.")
+        print(f"  Stderr: {e.stderr.strip()}")
+        return float('inf') # 返回 inf 表示计算失败
+    except subprocess.TimeoutExpired:
+        print(f"Error: C++ verifier timed out after 600 seconds.")
+        return float('inf')
+    except ValueError:
+        print(f"Error: Could not parse C++ verifier output: '{result.stdout.strip()}'")
+        return float('inf')
     except Exception as e:
-        # print(f"Warning: compute_m_height failed. Error: {e}") # Optional debug info
+        print(f"An unexpected error occurred while calling C++ verifier: {e}")
         return float('inf')
 
 def generate_neighbor(current_P, element_min, element_max):
@@ -174,17 +243,16 @@ def simulated_annealing(initial_P, m, element_min, element_max,
 
     current_P = initial_P.copy()
     current_G = np.hstack((I_k, current_P))
-    current_cost = 114514  # Set to infinite to ignore seed's initial cost
+    current_cost = float('inf') # Start with inf cost before first calculation
 
     best_P = current_P.copy()
-    best_cost = current_cost
-
+    best_cost = float('inf')
     second_best_P = current_P.copy()
-    second_best_cost = current_cost
+    second_best_cost = float('inf')
 
-    print(f"Initial seed cost (m={m}): {current_cost if current_cost != float('inf') else 'inf'}")
+    print(f"Initial seed cost (m={m}, via C++): {current_cost if current_cost != float('inf') else 'inf'}")
     if best_cost == float('inf'):
-        print("Warning: Initial seed matrix has infinite cost. Annealing might not be effective.")
+        print("Warning: Initial seed matrix has infinite cost via C++. Annealing might not be effective.")
 
 
     temperature = initial_temp
@@ -193,6 +261,10 @@ def simulated_annealing(initial_P, m, element_min, element_max,
 
     progress_bar = tqdm(total=total_steps, unit="steps", desc="Annealing", ncols=100)
     steps_done = 0
+
+    final_P_to_verify = None
+    cost_during_annealing = float('inf')
+    annealing_interrupted = False
 
     try:
         with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
@@ -212,69 +284,109 @@ def simulated_annealing(initial_P, m, element_min, element_max,
                 results = executor.map(evaluate_candidate, tasks_at_this_temp)
 
                 # Process results and apply SA logic
-                for neighbor_P_list, neighbor_cost in results:
+                for neighbor_P_list, neighbor_cost_cpp in results:
                     steps_done += 1
                     progress_bar.update(1)
 
                     neighbor_P = np.array(neighbor_P_list, dtype=np.int64)
 
-                    if neighbor_cost < current_cost:
+                    if neighbor_cost_cpp < current_cost:
                         # Accept better solution
                         current_P = neighbor_P
-                        current_cost = neighbor_cost
+                        current_cost = neighbor_cost_cpp # Update current cost (C++)
                         # Update the global best solution
-                        if neighbor_cost < best_cost:
+                        if neighbor_cost_cpp < best_cost:
                             # Update second best to the previous best
                             second_best_P = best_P.copy()
-                            second_best_cost = best_cost
-                            best_cost = neighbor_cost
+                            second_best_cost = best_cost # Store previous best C++ cost
+                            # Update best
+                            best_cost = neighbor_cost_cpp # Store new best C++ cost
                             best_P = neighbor_P.copy()
-                            progress_bar.set_description(f"Annealing (T={temperature:.2f}, Best={best_cost:.4f})")
-                        elif neighbor_cost < second_best_cost:
+                            progress_bar.set_description(f"Annealing (T={temperature:.2f}, Best (C++)={best_cost:.4f})")
+                        elif neighbor_cost_cpp < second_best_cost: # Only update second best if better than current second best
                             # Update second best to the current solution
                             second_best_P = neighbor_P.copy()
-                            second_best_cost = neighbor_cost
+                            second_best_cost = neighbor_cost_cpp # Store new second best C++ cost
 
                     else:
                         # Accept worse solution with a certain probability
-                        delta_cost = neighbor_cost - current_cost
-                        acceptance_prob = math.exp(-delta_cost / temperature)
-                        if random.random() < acceptance_prob:
-                            current_P = neighbor_P
-                            current_cost = neighbor_cost
+                         if temperature > 1e-9: # Avoid division by zero if temp is extremely small
+                            delta_cost = neighbor_cost_cpp - current_cost
+                            # Handle potential inf - inf or inf - finite cases safely
+                            if np.isfinite(delta_cost) or (neighbor_cost_cpp == float('inf') and current_cost != float('inf')):
+                                acceptance_prob = math.exp(-delta_cost / temperature) if np.isfinite(delta_cost) else 0.0 # Prob is 0 if moving to inf
+                                if random.random() < acceptance_prob:
+                                    current_P = neighbor_P
+                                    current_cost = neighbor_cost_cpp # Update current cost (C++)
+                         # Else: If temperature is ~0 or delta_cost is not finite (e.g., inf - inf), don't accept worse
 
                 # Cool down
                 temperature *= cooling_rate
-                progress_bar.set_description(f"Annealing (T={temperature:.2f}, Best={best_cost:.4f})")
+                progress_bar.set_description(f"Annealing (T={temperature:.2f}, Best (C++)={best_cost:.4f})")
 
 
     except KeyboardInterrupt:
-        print("Annealing process interrupted by user.")
-        print("Returning the second best solution found so far.")
-        print(second_best_P)
-        print(f"Best cost found before interruption: {best_cost if best_cost != float('inf') else 'inf'}")
-        return second_best_P, second_best_cost
+        print("\nAnnealing process interrupted by user.")
+        print("Will use the second best solution found for final verification.")
+        final_P_to_verify = second_best_P.copy()
+        cost_during_annealing = second_best_cost # Use the C++ cost found for second best
+        annealing_interrupted = True
     finally:
         progress_bar.close()
+        if not annealing_interrupted:
+             final_P_to_verify = best_P.copy()
+             cost_during_annealing = best_cost # Use the C++ cost found for best
 
-    print("--- Simulated Annealing Finished ---")
-    print(f"Best cost found (m={m}): {best_cost if best_cost != float('inf') else 'inf'}")
-    print(f"Second best cost found (m={m}): {second_best_cost if second_best_cost != float('inf') else 'inf'}")
 
-    if second_best_cost < float('inf'):
-         # Save the second best result
+    print("\n--- Simulated Annealing Finished ---")
+    print(f"Cost found during annealing (via C++): {cost_during_annealing if cost_during_annealing != float('inf') else 'inf'}")
+
+    # --- Final Verification using Python Verifier ---
+    verified_cost = float('inf')
+    if final_P_to_verify is not None and cost_during_annealing != float('inf'): # Only verify if we found a finite cost solution
+        print("\nPerforming final verification using Python's compute_m_height...")
+        final_G = np.hstack((I_k, final_P_to_verify))
+        try:
+            # Directly call the imported Python function
+            verified_cost = compute_m_height(final_G, m)
+            print(f"Final verified cost (via Python): {verified_cost if np.isfinite(verified_cost) else 'inf'}")
+        except Exception as e:
+            print(f"Error during final Python verification: {e}")
+            print("Proceeding with C++ cost result for saving/output.")
+            # Keep verified_cost as inf if Python verification fails
+    elif final_P_to_verify is None:
+         print("\nNo valid solution found during annealing to verify.")
+    else: # cost_during_annealing was inf
+         print("\nBest solution found during annealing had infinite cost (via C++), skipping Python verification.")
+
+
+    # --- Saving / Output ---
+    # Decide which result/cost to save or print based on verification success
+    final_P_to_output = final_P_to_verify
+    final_cost_to_report = verified_cost if np.isfinite(verified_cost) else cost_during_annealing # Prefer verified cost if finite
+
+    if final_P_to_output is not None:
         if output_file:
-            save_p_matrix(second_best_P, output_file)
+             # Consider adding cost to the output file? Or just save P? Currently saves P.
+            save_p_matrix(final_P_to_output, output_file)
+            print(f"Final P matrix saved to '{output_file}' (corresponding cost reported above).")
         else:
-            print("Second best P matrix:")
-            with np.printoptions(precision=3, suppress=True):
-                print(second_best_P)
-            print("Corresponding G = [I|P] matrix:")
-            second_best_G = np.hstack((I_k, second_best_P))
-            with np.printoptions(precision=3, suppress=True):
-                 print(second_best_G)
+            # Print the P matrix that corresponds to the final_cost_to_report
+            print("Final P matrix:")
+            with np.printoptions(linewidth=np.inf, threshold=np.inf): # Print full matrix
+                print(final_P_to_output)
+            print(f"(Reported cost: {final_cost_to_report if final_cost_to_report != float('inf') else 'inf'})")
+            # Optional: Print the full G matrix as well
+            # print("Corresponding G = [I|P] matrix:")
+            # final_G_output = np.hstack((I_k, final_P_to_output))
+            # with np.printoptions(linewidth=np.inf, threshold=np.inf):
+            #      print(final_G_output)
+    else:
+        print("No final matrix to save or output.")
 
-    return second_best_P, second_best_cost
+
+    # Return the P matrix and the cost reported (prefer verified cost)
+    return final_P_to_output, final_cost_to_report
 
 
 # --- Main Execution ---
