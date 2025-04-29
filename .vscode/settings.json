@@ -1,3 +1,4 @@
 {
-    "C_Cpp.default.compilerPath": "/usr/bin/g++"
+    "C_Cpp.default.compilerPath": "/usr/bin/g++",
+    "cmake.sourceDirectory": "/home/reisen/Documents/repo/629-pj/lp-verifier-cpp"
 }
